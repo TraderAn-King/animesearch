@@ -8,6 +8,7 @@ const app = express();
 app.get("/", (req, res) => {
     res.send("✅ Bot is running...");
 });
+
 // اطلاعات ربات
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const DOWNLOAD_LINK = "https://t.me/Anime_Faarsi";
@@ -29,6 +30,7 @@ async function searchAnime(query) {
                     title {
                         romaji
                         english
+                        native
                     }
                     season
                     seasonYear
@@ -115,7 +117,7 @@ bot.on("message", async (msg) => {
         const anime = await searchAnime(query);
         if (anime) {
             const genres = anime.genres.map(g => `#${g.replace(/\s/g, "_")}`).join(" ");
-            const caption = `🎬 *${anime.title.romaji}*\n📅 سال انتشار: ${anime.seasonYear}\n📊 امتیاز: ${anime.averageScore / 10}/10\n🎭 ژانر: ${genres}`;
+            const caption = `🎬 *${anime.title.native}*\n\n*نام انگلیسی:* ${anime.title.english}\n*نام فارسی:* ${anime.title.romaji}\n📅 سال انتشار: ${anime.seasonYear}\n📊 امتیاز: ${anime.averageScore / 10}/10\n🎭 ژانر: ${genres}\n🎥 تعداد قسمت‌ها: ${anime.episodes}`;
 
             bot.sendPhoto(chatId, anime.coverImage.large, { caption, parse_mode: "Markdown" });
 
@@ -125,7 +127,7 @@ bot.on("message", async (msg) => {
                 }
             });
 
-            bot.sendMessage(ADMIN_ID, `⚠️ کاربر ${userId} درخواست انیمه "${query}" را دارد.`);
+            // حذف پیام ادمین در صورت درخواست
         } else {
             bot.sendMessage(chatId, "⚠️ انیمه‌ای با این نام پیدا نشد.");
         }
@@ -152,7 +154,6 @@ bot.on("callback_query", async (callback) => {
 });
 
 console.log("✅ ربات فعال شد...");
-
 
 // Render نیاز به یک پورت باز دارد
 const PORT = process.env.PORT || 3000;
