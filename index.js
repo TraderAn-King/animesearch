@@ -117,23 +117,21 @@ bot.on("message", async (msg) => {
         const anime = await searchAnime(query);
         if (anime) {
             const genres = anime.genres.map(g => `#${g.replace(/\s/g, "_")}`).join(" ");
-            const caption = `🎬 *${anime.title.native}*\n\n*نام انگلیسی:* ${anime.title.english}\n*نام فارسی:* ${anime.title.romaji}\n📅 سال انتشار: ${anime.seasonYear}\n📊 امتیاز: ${anime.averageScore / 10}/10\n🎭 ژانر: ${genres}\n🎥 تعداد قسمت‌ها: ${anime.episodes}`;
+            const caption = `🎬 *${anime.title.native}*\n\n*نام انگلیسی:* ${anime.title.english}\n*نام فارسی:* ${anime.title.romaji}\n📅 *سال انتشار:* ${anime.seasonYear}\n📊 *امتیاز:* ${anime.averageScore / 10}/10\n🎭 *ژانر:* ${genres}\n🎥 *تعداد قسمت‌ها:* ${anime.episodes}\n\n🔻 *شما می‌توانید این انیمه را با کلیک کردن روی دکمه پایین دانلود کنید:*`;
 
-            bot.sendPhoto(chatId, anime.coverImage.large, { caption, parse_mode: "Markdown" });
-
-            bot.sendMessage(chatId, "🔻 دانلود انیمه:", {
+            bot.sendPhoto(chatId, anime.coverImage.large, {
+                caption,
+                parse_mode: "Markdown",
                 reply_markup: {
-                    inline_keyboard: [[{ text: "دانلود", url: DOWNLOAD_LINK }]]
+                    inline_keyboard: [[{ text: "⬇️ دانلود انیمه", url: DOWNLOAD_LINK }]]
                 }
             });
 
-            // حذف پیام ادمین در صورت درخواست
         } else {
             bot.sendMessage(chatId, "⚠️ انیمه‌ای با این نام پیدا نشد.");
         }
     }
 });
-
 // مدیریت پنل ادمین
 bot.on("callback_query", async (callback) => {
     const chatId = callback.message.chat.id;
