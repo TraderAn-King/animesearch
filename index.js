@@ -1,4 +1,5 @@
 require("dotenv").config();
+const fs = require("fs");
 const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
 
@@ -19,6 +20,21 @@ const CHANNEL_USERNAME = "@Anime_Faarsi";
 const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 
 let blockedUsers = new Set();
+let users = loadUsers(); // بارگذاری کاربران از فایل
+
+// تابع بارگذاری کاربران
+function loadUsers() {
+    try {
+        return JSON.parse(fs.readFileSync("user.json", "utf8"));
+    } catch (error) {
+        return [];
+    }
+}
+
+// تابع ذخیره کاربران
+function saveUsers() {
+    fs.writeFileSync("user.json", JSON.stringify(users, null, 2));
+}
 
 // تابع برای جستجوی انیمه در AniList
 async function searchAnime(query) {
@@ -32,10 +48,8 @@ async function searchAnime(query) {
                         english
                         native
                     }
-                    season
                     seasonYear
                     episodes
-                    format
                     genres
                     averageScore
                     coverImage {
@@ -66,18 +80,23 @@ async function checkUserSubscription(userId) {
     }
 }
 
-// پیام خوش‌آمدگویی
+// پیام خوش‌آمدگویی و ثبت کاربر
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
+
+    if (!users.includes(userId)) {
+        users.push(userId);
+        saveUsers();
+    }
 
     if (userId === ADMIN_ID) {
         bot.sendMessage(chatId, "👨‍💻 *پنل مدیریت*", {
             parse_mode: "Markdown",
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: "🚫 مسدود کردن کاربر", callback_data: "block_user" }],
-                    [{ text: "✅ رفع مسدودیت", callback_data: "unblock_user" }]
+                    [{ text: "📊 آمار کاربران", callback_data: "stats" }],
+                    [{ text: "📢 ارسال پیام همگانی", callback_data: "broadcast" }]
                 ]
             }
         });
@@ -100,10 +119,13 @@ bot.onText(/\/start/, async (msg) => {
 bot.on("message", async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
+
+    if (!msg.text) return; // جلوگیری از کرش در صورتی که پیام متنی نباشد
+
     const query = msg.text.trim();
 
     if (!query.startsWith("/")) {
-        if (blockedUsers.has(userId)) {
+        if (blockedUsers.has(userId) && userId !== ADMIN_ID) {
             bot.sendMessage(chatId, "❌ شما مسدود شده‌اید.");
             return;
         }
@@ -126,7 +148,6 @@ bot.on("message", async (msg) => {
                     inline_keyboard: [[{ text: "⬇️ دانلود انیمه", url: DOWNLOAD_LINK }]]
                 }
             });
-
         } else {
             bot.sendMessage(chatId, "⚠️ انیمه‌ای با این نام پیدا نشد.");
         }
@@ -136,17 +157,20 @@ bot.on("message", async (msg) => {
 bot.on("callback_query", async (callback) => {
     const chatId = callback.message.chat.id;
 
-    if (callback.data === "block_user") {
-        bot.sendMessage(chatId, "👤 شناسه کاربری کاربر را ارسال کنید:");
-        bot.once("message", (msg) => {
-            blockedUsers.add(parseInt(msg.text.trim()));
-            bot.sendMessage(chatId, "✅ کاربر مسدود شد.");
-        });
-    } else if (callback.data === "unblock_user") {
-        bot.sendMessage(chatId, "👤 شناسه کاربری کاربر را ارسال کنید:");
-        bot.once("message", (msg) => {
-            blockedUsers.delete(parseInt(msg.text.trim()));
-            bot.sendMessage(chatId, "✅ کاربر رفع مسدودیت شد.");
+    if (callback.data === "stats") {
+        bot.sendMessage(chatId, `📊 تعداد کل کاربران: ${users.length}`);
+    } else if (callback.data === "broadcast") {
+        bot.sendMessage(chatId, "📢 پیام موردنظر خود را ارسال کنید:");
+        bot.once("message", async (msg) => {
+            const messageText = msg.text;
+            for (const userId of users) {
+                try {
+                    await bot.sendMessage(userId, `📢 پیام جدید از ادمین:\n\n${messageText}`);
+                } catch (error) {
+                    console.error(`❌ ارسال پیام به ${userId} ناموفق بود.`);
+                }
+            }
+            bot.sendMessage(chatId, "✅ پیام به همه کاربران ارسال شد.");
         });
     }
 });
