@@ -2,6 +2,12 @@ require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const axios = require("axios");
 
+const express = require("express");
+const app = express();
+
+app.get("/", (req, res) => {
+    res.send("✅ Bot is running...");
+});
 // اطلاعات ربات
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const DOWNLOAD_LINK = "https://t.me/Anime_Faarsi";
@@ -146,3 +152,10 @@ bot.on("callback_query", async (callback) => {
 });
 
 console.log("✅ ربات فعال شد...");
+
+
+// Render نیاز به یک پورت باز دارد
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`🚀 Server is running on port ${PORT}`);
+});
