@@ -118,24 +118,43 @@ bot.on("message", async (msg) => {
         return;
     }
 
-    const query = msg.text.trim();
-    const anime = await searchAnime(query);
-    if (anime) {
-        const genres = anime.genres.map(g => `#${g.replace(/\s/g, "_")}`).join(" ");
-        const caption = `🎬 *${anime.title.native}*\n\n*نام انگلیسی:* ${anime.title.english}\n*نام فارسی:* ${anime.title.romaji}\n📅 *سال انتشار:* ${anime.seasonYear}\n📊 *امتیاز:* ${anime.averageScore / 10}/10\n🎭 *ژانر:* ${genres}\n🎥 *تعداد قسمت‌ها:* ${anime.episodes}\n\n🔻 *شما می‌توانید این انیمه را با کلیک کردن روی دکمه پایین دانلود کنید:*`;
+    const query = msg.text.trim().toLowerCase();
 
-        bot.sendPhoto(chatId, anime.coverImage.large, {
-            caption,
+    // لیست انیمه‌ها و لینک‌هایشان
+    const animeLinks = {
+        "solo leveling": "https://t.me/Anime_Faarsi",
+        "solo leveling 2": "https://t.me/Anime_Faarsi/208",
+        "solo leveling session 2": "https://t.me/Anime_Faarsi/208",
+        "the eminence in shadow": "https://t.me/Anime_Faarsi/218",
+        "the eminence in shadow 2": "https://t.me/Anime_Faarsi/220",
+        "invincible": "https://t.me/Anime_Faarsi/222"
+    };
+
+    if (animeLinks[query]) {
+        bot.sendMessage(chatId, `🎬 *${query.toUpperCase()}*`, {
             parse_mode: "Markdown",
             reply_markup: {
-                inline_keyboard: [[{ text: "⬇️ دانلود انیمه", url: DOWNLOAD_LINK }]]
+                inline_keyboard: [[{ text: "📺 مشاهده انیمه", url: animeLinks[query] }]]
             }
         });
     } else {
-        bot.sendMessage(chatId, messages.no_result);
+        const anime = await searchAnime(query);
+        if (anime) {
+            const genres = anime.genres.map(g => `#${g.replace(/\s/g, "_")}`).join(" ");
+            const caption = `🎬 *${anime.title.native}*\n\n*نام انگلیسی:* ${anime.title.english}\n*نام فارسی:* ${anime.title.romaji}\n📅 *سال انتشار:* ${anime.seasonYear}\n📊 *امتیاز:* ${anime.averageScore / 10}/10\n🎭 *ژانر:* ${genres}\n🎥 *تعداد قسمت‌ها:* ${anime.episodes}\n\n🔻 *شما می‌توانید این انیمه را با کلیک کردن روی دکمه پایین دانلود کنید:*`;
+
+            bot.sendPhoto(chatId, anime.coverImage.large, {
+                caption,
+                parse_mode: "Markdown",
+                reply_markup: {
+                    inline_keyboard: [[{ text: "⬇️ دانلود انیمه", url: DOWNLOAD_LINK }]]
+                }
+            });
+        } else {
+            bot.sendMessage(chatId, messages.no_result);
+        }
     }
 });
-
 // مدیریت دکمه‌های ادمین
 bot.on("callback_query", async (callback) => {
     const chatId = callback.message.chat.id;
