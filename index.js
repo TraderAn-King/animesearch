@@ -14,7 +14,7 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 const DOWNLOAD_LINK = "https://t.me/Anime_Faarsi";
 const ADMIN_ID = 2048310529;
 const CHANNEL_USERNAME = "@Anime_Faarsi";
-
+const CHANNEL_LINK = "https://t.me/Anime_Faarsi";
 const startTime = Date.now(); // زمان شروع ربات
 
 // راه‌اندازی ربات
