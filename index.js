@@ -517,9 +517,32 @@ bot.onText(new RegExp(`^(${PREFIXES.map(p => `\\${p}`).join("|")})menu$`), (msg)
 🔹 \`addanim name\` - افزودن یک انیمه جدید (فقط ادمین)
 🔹 \`addanimep name link episode\` - افزودن لینک دانلود به یک انیمه (فقط ادمین)
 🔹 \`editanime name\` - ویرایش اطلاعات انیمه (فقط ادمین)
-
+🔹 \`adddes name\` - ویرایش اطلاعات انیمه (فقط ادمین)
 ✅ می‌توانید از پیشوندهای *"/", ".", "!"* برای ارسال دستورات استفاده کنید.
 `, { parse_mode: "Markdown" });
+});
+
+bot.onText(/\/adddes (.+) (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    if (userId !== ADMIN_ID) {
+        bot.sendMessage(chatId, "❌ شما اجازه این کار را ندارید.");
+        return;
+    }
+
+    const animeName = match[1].toLowerCase().trim();
+    const description = match[2].trim();
+
+    if (!animeData[animeName]) {
+        bot.sendMessage(chatId, `❌ انیمه *${animeName}* در لیست نیست. اول از \`/addanim\` استفاده کنید.`, { parse_mode: "Markdown" });
+        return;
+    }
+
+    animeData[animeName].description = description;
+    saveAnimeData();
+
+    bot.sendMessage(chatId, `✅ توضیح برای انیمه *${animeName}* ذخیره شد.`, { parse_mode: "Markdown" });
 });
 
 bot.onText(/\/editanime (.+)/, (msg, match) => {
@@ -538,6 +561,10 @@ bot.onText(/\/editanime (.+)/, (msg, match) => {
         return;
     }
 
+    let descriptionText = animeData[animeName].description
+        ? `📖 *توضیح:* ${animeData[animeName].description}\n\n`
+        : "❌ توضیحی برای این انیمه ثبت نشده است.\n\n";
+
     let linksText = "📥 *لینک‌های دانلود:*\n";
     let keyboard = [];
 
@@ -548,11 +575,12 @@ bot.onText(/\/editanime (.+)/, (msg, match) => {
         }
     }
 
-    bot.sendMessage(chatId, `⚙️ شما در حال ویرایش انیمه *${animeName}* هستید.\n\n${linksText}`, {
+    bot.sendMessage(chatId, `⚙️ شما در حال ویرایش انیمه *${animeName}* هستید.\n\n${descriptionText}${linksText}`, {
         parse_mode: "Markdown",
         reply_markup: {
             inline_keyboard: [
                 [{ text: "✏️ ویرایش نام", callback_data: `edit_name_${animeName}` }],
+                [{ text: "📖 ویرایش توضیح", callback_data: `edit_description_${animeName}` }], // 👈 اضافه شد
                 [{ text: "🔗 ویرایش لینک‌های دانلود", callback_data: `edit_links_${animeName}` }],
                 [{ text: "🎬 ویرایش تعداد قسمت‌ها", callback_data: `edit_episodes_${animeName}` }],
                 [{ text: "🗑 حذف انیمه", callback_data: `delete_${animeName}` }]
@@ -561,7 +589,35 @@ bot.onText(/\/editanime (.+)/, (msg, match) => {
     });
 });
 
+bot.on("callback_query", async (callback) => {
+    const chatId = callback.message.chat.id;
+    const userId = callback.from.id;
+    const data = callback.data;
+
+    if (data.startsWith("edit_")) {
+        const [action, animeName] = data.split("_");
+
+        if (!animeData[animeName]) {
+            bot.sendMessage(chatId, "❌ انیمه موردنظر یافت نشد.");
+            return;
+        }
+
+        if (action === "edit_description") {
+            bot.sendMessage(chatId, `📖 لطفاً توضیح جدید برای انیمه *${animeName}* را ارسال کنید:`);
+            bot.once("message", (msg) => {
+                animeData[animeName].description = msg.text.trim();
+                saveAnimeData();
+                bot.sendMessage(chatId, `✅ توضیح انیمه *${animeName}* تغییر کرد.`);
+            });
+        }
+    }
+});
+
 bot.onText(/\/ping/, (msg) => {
+    bot.sendMessage(msg.chat.id, "🏓 Pong! ربات آنلاین است.");
+});
+
+bot.onText(/\/pinng/, (msg) => {
     bot.sendMessage(msg.chat.id, "🏓 Pong! ربات آنلاین است.");
 });
 
@@ -636,31 +692,7 @@ bot.on("callback_query", async (callback) => {
     const userId = callback.from.id;
     const data = callback.data;
 
-    // بررسی دسترسی ادمین
-    if ((data.startsWith("edit_") || data.startsWith("delete_")) && userId !== ADMIN_ID) {
-        bot.sendMessage(chatId, "❌ شما دسترسی به این دستور ندارید.");
-        return;
-    }
-
-    if (data === "stats") {
-        bot.sendMessage(chatId, `📊 تعداد کل کاربران: ${users.length}`);
-    } 
-
-    else if (data === "broadcast") {
-        bot.sendMessage(chatId, "📢 پیام موردنظر خود را ارسال کنید:");
-        bot.once("message", async (msg) => {
-            for (const userId of users) {
-                try {
-                    await bot.sendMessage(userId, `📢 پیام جدید:\n\n${msg.text}`);
-                } catch (error) {
-                    console.error(`❌ ارسال پیام به ${userId} ناموفق بود.`);
-                }
-            }
-            bot.sendMessage(chatId, "✅ پیام به همه کاربران ارسال شد.");
-        });
-    } 
-
-    else if (data.startsWith("edit_") || data.startsWith("delete_")) {
+    if (data.startsWith("edit_") || data.startsWith("delete_")) {
         const [action, animeName] = data.split("_");
 
         if (!animeData[animeName] && action !== "delete") {
@@ -669,45 +701,107 @@ bot.on("callback_query", async (callback) => {
         }
 
         if (action === "edit_name") {
-            bot.sendMessage(chatId, `✏️ لطفاً نام جدید انیمه *${animeName}* را وارد کنید:`);
+            bot.sendMessage(chatId, `✏️ لطفاً نام جدید انیمه *${animeName}* را ارسال کنید:`);
             bot.once("message", (msg) => {
                 const newName = msg.text.trim();
-                animeData[newName] = animeData[animeName];
-                delete animeData[animeName];
-                saveAnimeData();
-                bot.sendMessage(chatId, `✅ نام انیمه *${animeName}* به *${newName}* تغییر یافت.`);
+                bot.sendMessage(chatId, `⚠️ آیا مطمئن هستید که نام انیمه *${animeName}* به *${newName}* تغییر کند؟`, {
+                    parse_mode: "Markdown",
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: "✅ بله", callback_data: `confirm_edit_name_${animeName}_${newName}` }],
+                            [{ text: "❌ خیر", callback_data: "cancel" }]
+                        ]
+                    }
+                });
             });
-        } 
+        }
+
+        else if (action === "edit_description") {
+            bot.sendMessage(chatId, `📖 لطفاً توضیح جدید برای انیمه *${animeName}* را ارسال کنید:`);
+            bot.once("message", (msg) => {
+                const newDescription = msg.text.trim();
+                bot.sendMessage(chatId, `⚠️ آیا مطمئن هستید که توضیح انیمه *${animeName}* تغییر کند؟`, {
+                    parse_mode: "Markdown",
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: "✅ بله", callback_data: `confirm_edit_description_${animeName}_${newDescription}` }],
+                            [{ text: "❌ خیر", callback_data: "cancel" }]
+                        ]
+                    }
+                });
+            });
+        }
 
         else if (action === "edit_links") {
-            bot.sendMessage(chatId, `🔗 لطفاً لینک‌های دانلود را برای قسمت‌های انیمه *${animeName}* ارسال کنید.`);
+            bot.sendMessage(chatId, `🔗 لطفاً لینک‌های جدید دانلود برای انیمه *${animeName}* را ارسال کنید:`);
             bot.once("message", (msg) => {
-                const links = msg.text.trim().split("\n");
-                animeData[animeName].episodesLinks = links;
-                saveAnimeData();
-                bot.sendMessage(chatId, `✅ لینک‌های دانلود برای انیمه *${animeName}* ویرایش شد.`);
+                const newLinks = msg.text.trim();
+                bot.sendMessage(chatId, `⚠️ آیا مطمئن هستید که لینک‌های انیمه *${animeName}* تغییر کند؟`, {
+                    parse_mode: "Markdown",
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: "✅ بله", callback_data: `confirm_edit_links_${animeName}_${newLinks}` }],
+                            [{ text: "❌ خیر", callback_data: "cancel" }]
+                        ]
+                    }
+                });
             });
+        }
+
+        else if (action === "delete") {
+            bot.sendMessage(chatId, `⚠️ آیا مطمئن هستید که انیمه *${animeName}* حذف شود؟`, {
+                parse_mode: "Markdown",
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: "✅ بله", callback_data: `confirm_delete_${animeName}` }],
+                        [{ text: "❌ خیر", callback_data: "cancel" }]
+                    ]
+                }
+            });
+        }
+    }
+});
+
+bot.on("callback_query", (callback) => {
+    const chatId = callback.message.chat.id;
+    const data = callback.data;
+
+    if (data.startsWith("confirm_")) {
+        const parts = data.split("_");
+        const action = parts[1];
+        const animeName = parts[2];
+
+        if (action === "edit" && parts[3] === "name") {
+            const newName = parts.slice(4).join("_");
+            animeData[newName] = animeData[animeName];
+            delete animeData[animeName];
+            saveAnimeData();
+            bot.sendMessage(chatId, `✅ نام انیمه *${animeName}* به *${newName}* تغییر یافت.`);
         } 
 
-        else if (action === "edit_episodes") {
-            bot.sendMessage(chatId, `🎬 لطفاً تعداد قسمت‌های انیمه *${animeName}* را وارد کنید:`);
-            bot.once("message", (msg) => {
-                const episodes = parseInt(msg.text.trim());
-                if (isNaN(episodes)) {
-                    bot.sendMessage(chatId, "⚠️ تعداد قسمت‌ها باید عدد صحیح باشد.");
-                    return;
-                }
-                animeData[animeName].episodes = episodes;
-                saveAnimeData();
-                bot.sendMessage(chatId, `✅ تعداد قسمت‌های انیمه *${animeName}* به ${episodes} تغییر یافت.`);
-            });
-        } 
+        else if (action === "edit" && parts[3] === "description") {
+            const newDescription = parts.slice(4).join("_");
+            animeData[animeName].description = newDescription;
+            saveAnimeData();
+            bot.sendMessage(chatId, `✅ توضیح انیمه *${animeName}* تغییر کرد.`);
+        }
+
+        else if (action === "edit" && parts[3] === "links") {
+            const newLinks = parts.slice(4).join("_");
+            animeData[animeName].episodesLinks = newLinks.split("\n");
+            saveAnimeData();
+            bot.sendMessage(chatId, `✅ لینک‌های دانلود انیمه *${animeName}* تغییر کرد.`);
+        }
 
         else if (action === "delete") {
             delete animeData[animeName];
             saveAnimeData();
-            bot.sendMessage(chatId, `🗑 انیمه *${animeName}* با موفقیت حذف شد.`);
+            bot.sendMessage(chatId, `🗑 انیمه *${animeName}* حذف شد.`);
         }
+    } 
+
+    else if (data === "cancel") {
+        bot.sendMessage(chatId, "✅ عملیات لغو شد.");
     }
 });
 
