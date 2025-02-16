@@ -433,27 +433,27 @@ bot.onText(/\/del/, async (msg) => {
 bot.onText(/\/addanim (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
-    
+
     if (userId !== ADMIN_ID) {
-        bot.sendMessage(chatId, "❌ شما دسترسی به این دستور ندارید.");
+        bot.sendMessage(chatId, "❌ شما دسترسی ندارید.");
         return;
     }
 
     const animeName = match[1].toLowerCase().trim();
 
-    // بررسی اگر قبلاً اضافه شده باشد
     if (animeData[animeName]) {
         bot.sendMessage(chatId, `⚠️ انیمه *${animeName}* قبلاً اضافه شده است.`);
         return;
     }
 
-    // اضافه کردن انیمه به لیست بدون اطلاعات اضافه
     animeData[animeName] = {
-        episodesLinks: {}  // فقط لینک‌های دانلود ذخیره می‌شود
+        title: animeName,
+        description: "", // اضافه شد ✅
+        episodesLinks: {}
     };
 
     saveAnimeData();
-    bot.sendMessage(chatId, `✅ انیمه *${animeName}* ذخیره شد. حالا با \`/addanimep\` لینک‌های دانلود را اضافه کنید.`, { parse_mode: "Markdown" });
+    bot.sendMessage(chatId, `✅ انیمه *${animeName}* ذخیره شد. حالا با \`/adddes ${animeName} توضیح\` توضیح را اضافه کنید.`, { parse_mode: "Markdown" });
 });
 
 
@@ -591,23 +591,26 @@ bot.onText(/\/editanime (.+)/, (msg, match) => {
 
 bot.on("callback_query", async (callback) => {
     const chatId = callback.message.chat.id;
-    const userId = callback.from.id;
     const data = callback.data;
 
     if (data.startsWith("edit_")) {
-        const [action, animeName] = data.split("_");
+        const parts = data.split("_");
+        const action = parts[1];
+        const animeName = parts.slice(2).join("_").toLowerCase(); // اینجا اصلاح شد ✅
+
+        console.log("Requested Anime:", animeName); // برای تست
 
         if (!animeData[animeName]) {
-            bot.sendMessage(chatId, "❌ انیمه موردنظر یافت نشد.");
+            bot.sendMessage(chatId, `❌ انیمه *${animeName}* یافت نشد.`);
             return;
         }
 
-        if (action === "edit_description") {
+        if (action === "description") {
             bot.sendMessage(chatId, `📖 لطفاً توضیح جدید برای انیمه *${animeName}* را ارسال کنید:`);
             bot.once("message", (msg) => {
                 animeData[animeName].description = msg.text.trim();
                 saveAnimeData();
-                bot.sendMessage(chatId, `✅ توضیح انیمه *${animeName}* تغییر کرد.`);
+                bot.sendMessage(chatId, `✅ توضیح انیمه *${animeName}* ذخیره شد.`);
             });
         }
     }
@@ -617,7 +620,7 @@ bot.onText(/\/ping/, (msg) => {
     bot.sendMessage(msg.chat.id, "🏓 Pong! ربات آنلاین است.");
 });
 
-bot.onText(/\/pinng/, (msg) => {
+bot.onText(/\/pinnng/, (msg) => {
     bot.sendMessage(msg.chat.id, "🏓 Pong! ربات آنلاین است.");
 });
 
