@@ -24,6 +24,9 @@ let blockedUsers = new Set();
 let users = loadUsers();
 let messages = loadMessages(); // بارگذاری پیام‌ها
 
+let isBotSilentGroup = {}; // وضعیت خاموش یا روشن بودن در گروه‌ها
+let isBotSilentPrivate = {}; // وضعیت خاموش یا روشن بودن برای کاربران خصوصی
+
 let animeData = loadAnimeData(); // بارگذاری انیمه‌ها
 
 // تابع ذخیره انیمه‌ها
@@ -189,6 +192,46 @@ bot.onText(/\/ban/, async (msg) => {
     } catch (error) {
         bot.sendMessage(chatId, "❌ خطایی رخ داد، مطمئن شوید که ربات دسترسی مدیریت دارد.");
         console.error(error);
+    }
+});
+
+bot.onText(/\/silent/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    if (msg.chat.type === "private") {
+        // در چت خصوصی، هر کاربر خودش می‌تواند ربات را غیرفعال کند
+        isBotSilentPrivate[userId] = true;
+        bot.sendMessage(chatId, "🤖 ربات در چت خصوصی شما *غیرفعال* شد. برای فعال‌سازی دستور `/active` را ارسال کنید.", { parse_mode: "Markdown" });
+    } else {
+        // در گروه فقط ادمین‌ها می‌توانند ربات را غیرفعال کنند
+        bot.getChatMember(chatId, userId).then((member) => {
+            if (member.status === "administrator" || member.status === "creator") {
+                isBotSilentGroup[chatId] = true;
+                bot.sendMessage(chatId, "🤖 ربات در این گروه *غیرفعال* شد. برای فعال‌سازی دستور `/active` را ارسال کنید.", { parse_mode: "Markdown" });
+            } else {
+                bot.sendMessage(chatId, "❌ فقط ادمین‌ها می‌توانند ربات را غیرفعال کنند.");
+            }
+        });
+    }
+});
+
+bot.onText(/\/active/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    if (msg.chat.type === "private") {
+        isBotSilentPrivate[userId] = false;
+        bot.sendMessage(chatId, "✅ ربات در چت خصوصی شما دوباره *فعال* شد.", { parse_mode: "Markdown" });
+    } else {
+        bot.getChatMember(chatId, userId).then((member) => {
+            if (member.status === "administrator" || member.status === "creator") {
+                isBotSilentGroup[chatId] = false;
+                bot.sendMessage(chatId, "✅ ربات در این گروه دوباره *فعال* شد.", { parse_mode: "Markdown" });
+            } else {
+                bot.sendMessage(chatId, "❌ فقط ادمین‌ها می‌توانند ربات را فعال کنند.");
+            }
+        });
     }
 });
 
@@ -387,6 +430,58 @@ bot.onText(/\/del/, async (msg) => {
     }
 });
 
+bot.onText(/\/addanim (.+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    
+    if (userId !== ADMIN_ID) {
+        bot.sendMessage(chatId, "❌ شما دسترسی به این دستور ندارید.");
+        return;
+    }
+
+    const animeName = match[1].toLowerCase().trim();
+
+    // بررسی اگر قبلاً اضافه شده باشد
+    if (animeData[animeName]) {
+        bot.sendMessage(chatId, `⚠️ انیمه *${animeName}* قبلاً اضافه شده است.`);
+        return;
+    }
+
+    // اضافه کردن انیمه به لیست بدون اطلاعات اضافه
+    animeData[animeName] = {
+        episodesLinks: {}  // فقط لینک‌های دانلود ذخیره می‌شود
+    };
+
+    saveAnimeData();
+    bot.sendMessage(chatId, `✅ انیمه *${animeName}* ذخیره شد. حالا با \`/addanimep\` لینک‌های دانلود را اضافه کنید.`, { parse_mode: "Markdown" });
+});
+
+
+bot.onText(/\/addanimep (.+) (.+) (\d+)/, (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    if (userId !== ADMIN_ID) {
+        bot.sendMessage(chatId, "❌ شما دسترسی به این دستور ندارید.");
+        return;
+    }
+
+    const animeName = match[1].toLowerCase().trim();
+    const downloadLink = match[2].trim();
+    const episodeNumber = parseInt(match[3]);
+
+    if (!animeData[animeName]) {
+        bot.sendMessage(chatId, `❌ انیمه *${animeName}* در لیست ذخیره نشده است. ابتدا از \`/addanim\` استفاده کنید.`, { parse_mode: "Markdown" });
+        return;
+    }
+
+    // اضافه کردن لینک دانلود به قسمت مشخص‌شده
+    animeData[animeName].episodesLinks[episodeNumber] = downloadLink;
+    saveAnimeData();
+
+    bot.sendMessage(chatId, `✅ لینک دانلود قسمت ${episodeNumber} از *${animeName}* اضافه شد.`, { parse_mode: "Markdown" });
+});
+
 bot.onText(/\/editanime (.+)/, (msg, match) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
@@ -403,14 +498,25 @@ bot.onText(/\/editanime (.+)/, (msg, match) => {
         return;
     }
 
-    bot.sendMessage(chatId, `⚙️ شما در حال ویرایش انیمه *${animeName}* هستید. لطفاً گزینه‌ای را انتخاب کنید:`, {
+    let linksText = "📥 *لینک‌های دانلود:*\n";
+    let keyboard = [];
+
+    for (let i = 1; i <= Object.keys(animeData[animeName].episodesLinks).length; i++) {
+        if (animeData[animeName].episodesLinks[i]) {
+            linksText += `🔹 قسمت ${i}: ${animeData[animeName].episodesLinks[i]}\n`;
+            keyboard.push([{ text: `📥 قسمت ${i}`, url: animeData[animeName].episodesLinks[i] }]);
+        }
+    }
+
+    bot.sendMessage(chatId, `⚙️ شما در حال ویرایش انیمه *${animeName}* هستید.\n\n${linksText}`, {
+        parse_mode: "Markdown",
         reply_markup: {
             inline_keyboard: [
                 [{ text: "✏️ ویرایش نام", callback_data: `edit_name_${animeName}` }],
                 [{ text: "🔗 ویرایش لینک‌های دانلود", callback_data: `edit_links_${animeName}` }],
                 [{ text: "🎬 ویرایش تعداد قسمت‌ها", callback_data: `edit_episodes_${animeName}` }],
                 [{ text: "🗑 حذف انیمه", callback_data: `delete_${animeName}` }]
-            ]
+            ].concat(keyboard)
         }
     });
 });
@@ -435,74 +541,53 @@ bot.on("message", async (msg) => {
 
     if (!msg.text || msg.text.startsWith("/")) return;
 
-    if (blockedUsers.has(userId) && userId !== ADMIN_ID) {
-        bot.sendMessage(chatId, messages.blocked);
-        return;
-    }
+    // **اگر ربات در گروه غیرفعال باشد، هیچ پاسخی ارسال نکند**
+    if (msg.chat.type !== "private" && isBotSilentGroup[chatId]) return;
 
-    const isSubscribed = await checkUserSubscription(userId);
-    if (!isSubscribed) {
-        bot.sendMessage(chatId, messages.subscribe);
-        return;
-    }
+    // **اگر ربات در چت خصوصی کاربر غیرفعال باشد، هیچ پاسخی ارسال نکند**
+    if (msg.chat.type === "private" && isBotSilentPrivate[userId]) return;
 
     const query = msg.text.trim().toLowerCase();
 
-    // 1️⃣ ابتدا بررسی کنیم که آیا این انیمه در animeData (یعنی انیمه‌های ذخیره‌شده) وجود دارد؟
+    // **ادامه کد جستجو در دیتابیس و API**
     if (animeData[query]) {
         const anime = animeData[query];
         let keyboard = [];
 
-        for (let i = 1; i <= anime.episodes; i++) {
+        for (let i = 1; i <= Object.keys(anime.episodesLinks).length; i++) {
             if (anime.episodesLinks[i]) {
                 keyboard.push([{ text: `📥 قسمت ${i}`, url: anime.episodesLinks[i] }]);
             }
         }
 
-        bot.sendMessage(chatId, `🎬 *${query.toUpperCase()}*`, {
-            parse_mode: "Markdown",
-            reply_markup: { inline_keyboard: keyboard }
-        });
-
-        return;  // دیگر نیازی به بررسی بقیه موارد نیست
-    }
-
-    // 2️⃣ اگر در animeData نبود، لیست ثابت animeLinks را بررسی کن
-    const animeLinks = {
-        "solo leveling": "https://t.me/Anime_Faarsi",
-        "solo leveling 2": "https://t.me/Anime_Faarsi/208",
-        "solo leveling session 2": "https://t.me/Anime_Faarsi/208",
-        "the eminence in shadow": "https://t.me/Anime_Faarsi/218",
-        "the eminence in shadow 2": "https://t.me/Anime_Faarsi/220",
-        "invincible": "https://t.me/Anime_Faarsi/222"
-    };
-
-    if (animeLinks[query]) {
-        bot.sendMessage(chatId, `🎬 *${query.toUpperCase()}*`, {
-            parse_mode: "Markdown",
-            reply_markup: {
-                inline_keyboard: [[{ text: "📺 مشاهده انیمه", url: animeLinks[query] }]]
+        bot.sendMessage(chatId, `🎬 *${anime.title.native}*\n\n` +
+            (anime.title.english ? `🇬🇧 *نام انگلیسی:* ${anime.title.english}\n` : "") +
+            (anime.title.romaji ? `🇯🇵 *نام فارسی:* ${anime.title.romaji}\n` : ""),
+            {
+                parse_mode: "Markdown",
+                reply_markup: { inline_keyboard: keyboard }
             }
-        });
-
-        return;  // دیگر نیازی به بررسی API نیست
+        );
+        return;
     }
 
-    // 3️⃣ در نهایت اگر در هیچکدام نبود، از API برای جستجوی انیمه استفاده کن
+    // **در صورت نبودن در دیتابیس، جستجو در API**
     const anime = await searchAnime(query);
     if (anime) {
         const genres = anime.genres.map(g => `#${g.replace(/\s/g, "_")}`).join(" ");
-        const caption = `🎬 *${anime.title.native}*\n\n*نام انگلیسی:* ${anime.title.english}\n*نام فارسی:* ${anime.title.romaji}\n📅 *سال انتشار:* ${anime.seasonYear}\n📊 *امتیاز:* ${anime.averageScore / 10}/10\n🎭 *ژانر:* ${genres}\n🎥 *تعداد قسمت‌ها:* ${anime.episodes}\n\n🔻 *شما می‌توانید این انیمه را با کلیک کردن روی دکمه پایین دانلود کنید:*`;
+        const caption = `🎬 *${anime.title.native}*\n\n` +
+            (anime.title.english ? `🇬🇧 *نام انگلیسی:* ${anime.title.english}\n` : "") +
+            (anime.title.romaji ? `🇯🇵 *نام فارسی:* ${anime.title.romaji}\n` : "") +
+            `📅 *سال انتشار:* ${anime.seasonYear}\n📊 *امتیاز:* ${anime.averageScore / 10}/10\n🎭 *ژانر:* ${genres}\n🎥 *تعداد قسمت‌ها:* ${anime.episodes}\n\n` +
+            `🔻 *برای دانلود روی دکمه پایین کلیک کنید:*`;
 
         bot.sendPhoto(chatId, anime.coverImage.large, {
             caption,
             parse_mode: "Markdown",
             reply_markup: {
-                inline_keyboard: [[{ text: "⬇️ دانلود انیمه", url: DOWNLOAD_LINK }]]
+                inline_keyboard: [[{ text: "📥 دانلود از کانال تلگرام", url: CHANNEL_LINK }]]
             }
         });
-    } else {
-        bot.sendMessage(chatId, messages.no_result);
     }
 });
 // مدیریت دکمه‌های ادمین
@@ -613,9 +698,33 @@ async function searchAnime(query) {
 
     try {
         const response = await axios.post(url, queryData);
-        return response.data.data.Media;
+        const anime = response.data.data.Media;
+
+        if (anime) {
+            const animeName = anime.title.romaji.toLowerCase();
+
+            // **ذخیره در animeData در صورتی که قبلاً وجود نداشته باشد**
+            if (!animeData[animeName]) {
+                animeData[animeName] = {
+                    title: anime.title.romaji,
+                    english: anime.title.english || "ناموجود",
+                    native: anime.title.native || "ناموجود",
+                    episodes: anime.episodes || 0,
+                    year: anime.seasonYear || "نامشخص",
+                    genres: anime.genres || [],
+                    averageScore: anime.averageScore || 0,
+                    coverImage: anime.coverImage.large || "",
+                    episodesLinks: {} // هنوز لینک دانلود ندارد
+                };
+                saveAnimeData();
+            }
+
+            return anime;
+        } else {
+            return null;
+        }
     } catch (error) {
-        console.error("❌ Error fetching anime:", error);
+        console.error("❌ خطا در دریافت اطلاعات انیمه:", error);
         return null;
     }
 }
