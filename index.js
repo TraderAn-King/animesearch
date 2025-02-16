@@ -448,7 +448,7 @@ bot.onText(/\/addanim (.+)/, (msg, match) => {
 
     animeData[animeName] = {
         title: animeName,
-        description: "", // اضافه شد ✅
+        description: "", // 👈 مقدار اولیه اضافه شد ✅
         episodesLinks: {}
     };
 
@@ -596,8 +596,9 @@ bot.on("callback_query", async (callback) => {
     if (data.startsWith("edit_")) {
         const parts = data.split("_");
         const action = parts[1];
-        const animeName = parts.slice(2).join("_").toLowerCase(); // اینجا اصلاح شد ✅
+        const animeName = parts.slice(2).join("_").toLowerCase(); // 👈 اصلاح شد ✅
 
+        console.log("Anime Data:", animeData); // برای تست
         console.log("Requested Anime:", animeName); // برای تست
 
         if (!animeData[animeName]) {
@@ -620,7 +621,7 @@ bot.onText(/\/ping/, (msg) => {
     bot.sendMessage(msg.chat.id, "🏓 Pong! ربات آنلاین است.");
 });
 
-bot.onText(/\/pinnng/, (msg) => {
+bot.onText(/\/pinng/, (msg) => {
     bot.sendMessage(msg.chat.id, "🏓 Pong! ربات آنلاین است.");
 });
 
@@ -772,7 +773,7 @@ bot.on("callback_query", (callback) => {
     if (data.startsWith("confirm_")) {
         const parts = data.split("_");
         const action = parts[1];
-        const animeName = parts[2];
+        const animeName = parts.slice(2).join("_").toLowerCase(); // 👈 اصلاح شد ✅
 
         if (action === "edit" && parts[3] === "name") {
             const newName = parts.slice(4).join("_");
