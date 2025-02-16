@@ -30,18 +30,6 @@ let isBotSilentPrivate = {}; // وضعیت خاموش یا روشن بودن ب�
 let animeData = loadAnimeData(); // بارگذاری انیمه‌ها
 
 // تابع ذخیره انیمه‌ها
-function saveAnimeData() {
-    fs.writeFileSync("animeData.json", JSON.stringify(animeData, null, 2));
-}
-
-// تابع بارگذاری انیمه‌ها
-function loadAnimeData() {
-    try {
-        return JSON.parse(fs.readFileSync("animeData.json", "utf8"));
-    } catch (error) {
-        return {};
-    }
-}
 
 // بارگذاری کاربران از فایل
 function loadUsers() {
@@ -447,8 +435,12 @@ bot.onText(/\/addanim (.+)/, (msg, match) => {
     }
 
     animeData[animeName] = {
-        title: animeName,
-        description: "", // 👈 مقدار اولیه اضافه شد ✅
+        title: {
+            native: animeName, // 👈 اضافه شد ✅
+            english: animeName, // 👈 اضافه شد ✅
+            romaji: animeName  // 👈 اضافه شد ✅
+        },
+        description: "",
         episodesLinks: {}
     };
 
@@ -635,6 +627,14 @@ bot.onText(/\/uptime/, (msg) => {
 });
 
 // دریافت نام انیمه از کاربر
+const TELEGRAM_API_ID = '21305055';
+const TELEGRAM_API_HASH = '450c6ab2f7176fcfed4a8fe512ff83f4';
+const CHANNEL_LINK = 'https://t.me/Anime_Faarsi'; // لینک کانال
+
+const { TelegramClient } = require('telethon');
+const { StringSession } = require('telethon/sessions');
+
+// ربات تلگرام شما
 bot.on("message", async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id;
@@ -649,20 +649,20 @@ bot.on("message", async (msg) => {
 
     const query = msg.text.trim().toLowerCase();
 
-    // **ادامه کد جستجو در دیتابیس و API**
-    if (animeData[query]) {
-        const anime = animeData[query];
+    // **جستجو در کانال برای پست‌های مرتبط با انیمه**
+    const animePost = await getAnimePostFromChannel(query);
+    if (animePost) {
         let keyboard = [];
 
-        for (let i = 1; i <= Object.keys(anime.episodesLinks).length; i++) {
-            if (anime.episodesLinks[i]) {
-                keyboard.push([{ text: `📥 قسمت ${i}`, url: anime.episodesLinks[i] }]);
-            }
+        // استخراج قسمت‌ها و لینک‌های دانلود
+        const episodeLinks = extractEpisodeLinks(animePost);
+        for (let i = 0; i < episodeLinks.length; i++) {
+            keyboard.push([{ text: `📥 قسمت ${i + 1}`, url: episodeLinks[i] }]);
         }
 
-        bot.sendMessage(chatId, `🎬 *${anime.title.native}*\n\n` +
-            (anime.title.english ? `🇬🇧 *نام انگلیسی:* ${anime.title.english}\n` : "") +
-            (anime.title.romaji ? `🇯🇵 *نام فارسی:* ${anime.title.romaji}\n` : ""),
+        bot.sendMessage(chatId, `🎬 *${animePost.title}*\n\n` +
+            `📅 *سال انتشار:* ${animePost.releaseYear}\n📊 *امتیاز:* ${animePost.rating}\n🎭 *ژانر:* ${animePost.genre}\n\n` +
+            `🔻 *برای دانلود روی دکمه‌های پایین کلیک کنید:*`,
             {
                 parse_mode: "Markdown",
                 reply_markup: { inline_keyboard: keyboard }
@@ -671,25 +671,35 @@ bot.on("message", async (msg) => {
         return;
     }
 
-    // **در صورت نبودن در دیتابیس، جستجو در API**
-    const anime = await searchAnime(query);
-    if (anime) {
-        const genres = anime.genres.map(g => `#${g.replace(/\s/g, "_")}`).join(" ");
-        const caption = `🎬 *${anime.title.native}*\n\n` +
-            (anime.title.english ? `🇬🇧 *نام انگلیسی:* ${anime.title.english}\n` : "") +
-            (anime.title.romaji ? `🇯🇵 *نام فارسی:* ${anime.title.romaji}\n` : "") +
-            `📅 *سال انتشار:* ${anime.seasonYear}\n📊 *امتیاز:* ${anime.averageScore / 10}/10\n🎭 *ژانر:* ${genres}\n🎥 *تعداد قسمت‌ها:* ${anime.episodes}\n\n` +
-            `🔻 *برای دانلود روی دکمه پایین کلیک کنید:*`;
-
-        bot.sendPhoto(chatId, anime.coverImage.large, {
-            caption,
-            parse_mode: "Markdown",
-            reply_markup: {
-                inline_keyboard: [[{ text: "📥 دانلود از کانال تلگرام", url: CHANNEL_LINK }]]
-            }
-        });
-    }
+    // اگر انیمه پیدا نشد
+    bot.sendMessage(chatId, "انیمه‌ای با این نام پیدا نشد.");
 });
+
+// تابع برای گرفتن پست‌های کانال
+async function getAnimePostFromChannel(query) {
+    const client = new TelegramClient(new StringSession(''), TELEGRAM_API_ID, TELEGRAM_API_HASH);
+    await client.start();
+
+    const channel = await client.getEntity(CHANNEL_LINK);
+    const posts = await client.getMessages(channel, { limit: 10 });
+
+    // جستجوی پست‌ها بر اساس query
+    return posts.find(post => post.text && post.text.toLowerCase().includes(query));
+}
+
+// تابع برای استخراج لینک‌های قسمت‌ها از پست
+function extractEpisodeLinks(post) {
+    const links = [];
+    const regex = /🔻 Eposide_\d+/g;  // شبیه‌سازی برای پیدا کردن لینک‌ها
+    let match;
+    while (match = regex.exec(post.text)) {
+        const link = post.text.match(`🔻 ${match[0]} - ([^ ]+)`);
+        if (link && link[1]) {
+            links.push(link[1]);
+        }
+    }
+    return links;
+}
 // مدیریت دکمه‌های ادمین
 bot.on("callback_query", async (callback) => {
     const chatId = callback.message.chat.id;
