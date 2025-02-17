@@ -55,7 +55,7 @@ bot.on("message", async (msg) => {
                       `📥 *لینک‌های دانلود:*`;
 
         let buttons = [];
-        for (let i = 1; i <= Math.min(episodes, 20); i++) {
+        for (let i = 1; i <= Math.min(episodes, 1); i++) {
             buttons.push([{ text: `📥 Episode ${i}`, url: DOWNLOAD_LINK }]);
         }
         buttons.push([{ text: "📥 دانلود فصل دوم", url: DOWNLOAD_LINK }]);
